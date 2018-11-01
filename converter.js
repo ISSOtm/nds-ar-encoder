@@ -187,7 +187,7 @@ const NDSARTools = {
         "stored = [32:ofs+0x{loc}]",
         "stored = [16:ofs+0x{loc}]",
         "stored = [ 8:ofs+0x{loc}]",
-        "offset += 0x{val}"
+        "ofs += 0x{val}"
         // No more codes
     ],
 
@@ -196,8 +196,8 @@ const NDSARTools = {
     decodeTree: function(tree) {
         let lineID = 0; // Just in case there's any need to throw a ParseError...
         return (
-            function decodeElems(elemList, lines, indent) {
-                elemList.forEach(elem => {
+            function decodeElems(elem, lines, indent) {
+                elem.children.forEach(elem => {
                     lineID++;
 
                     let elemString = elem.type == NDSARTools.elemTypes.EXTENDED ? NDSARTools.exElemStrings[elem.exType] : NDSARTools.elemStrings[elem.type],
@@ -208,7 +208,7 @@ const NDSARTools = {
                     lines.push(indent + elemString);
 
                     if(typeof elem.children !== "undefined") {
-                        lines = decodeElems(elem.children, lines, indent + "  ");
+                        lines = decodeElems(elem, lines, indent + "  ");
                     }
                 });
                 return lines;
@@ -232,7 +232,7 @@ const NDSARTools = {
             NDSARTools.logMessage("Beginning decoding...");
 
             const encodedCode = NDSARTools.getEncodedCode().split("\n");
-            let codeTree = [],
+            let codeTree = {parent: null, children: []},
                 state = NDSARTools.states.CODE_BLOCK,
                 current = {parent: codeTree},
                 lineID = 1,
@@ -288,27 +288,41 @@ const NDSARTools = {
                         current.exType = getHexDigit(line[1]);
                         switch(getHexDigit(line[1])) {
                         case NDSARTools.extendedTypes.END_IF:
-                            if(current.parent == codeTree || !NDSARTools.elemTypes.isIf(current.parent.type)) {
+                            if(current.parent.parent === null || !NDSARTools.elemTypes.isIf(current.parent.type)) {
                                 throw new NDSARTools.ParseError("Encountered ENDIF without being in IF", lineID);
                             }
                             action = NDSARTools.actionTypes.ACTION_PARENT;
                             break;
 
                         case NDSARTools.extendedTypes.END_REPT:
-                            if(current.parent == codeTree || current.parent.type != NDSARTools.elemTypes.REPT_BLOCK) {
+                            if(current.parent.parent === null || current.parent.type != NDSARTools.elemTypes.REPT_BLOCK) {
                                 throw new NDSARTools.ParseError("Encountered ENDR without being in REPT", lineID);
                             }
                             action = NDSARTools.actionTypes.ACTION_PARENT;
                             break;
 
                         case NDSARTools.extendedTypes.END_ALL:
-                            if(current.parent == null) {
+                            if(current.parent.parent === null) {
                                 throw new NDSARTools.ParseError("Encountered ENDALL without being in anything.", lineID);
                             }
                             action = NDSARTools.actionTypes.ACTION_ROOT;
                             break;
 
-                            // TODO:
+                        case NDSARTools.extendedTypes.LD_OFS_IMM:
+                        case NDSARTools.extendedTypes.ADD_STORED:
+                        case NDSARTools.extendedTypes.SET_STORED:
+                        case NDSARTools.extendedTypes.ADD_OFS32:
+                            current.val = line.slice(8);
+                            break;
+
+                        case NDSARTools.extendedTypes.STORE_INC32:
+                        case NDSARTools.extendedTypes.STORE_INC16:
+                        case NDSARTools.extendedTypes.STORE_INC8:
+                        case NDSARTools.extendedTypes.LD_STORED32:
+                        case NDSARTools.extendedTypes.LD_STORED16:
+                        case NDSARTools.extendedTypes.LD_STORED8:
+                            current.loc = line.slice(8);
+                            break;
 
                         default:
                             throw new NDSARTools.ParseError("Invalid extended command type '" + line[1] + "'", lineID);
@@ -364,25 +378,25 @@ const NDSARTools = {
 
                 switch(action) {
                 case NDSARTools.actionTypes.ACTION_SIBLING:
-                    current.parent.push(current);
+                    current.parent.children.push(current);
                     current = {parent: current.parent};
                     break;
 
                 case NDSARTools.actionTypes.ACTION_CHILD:
                     current.children = [];
-                    current.parent.push(current);
-                    current = {parent: current.children};
+                    current.parent.children.push(current);
+                    current = {parent: current};
                     break;
 
                 case NDSARTools.actionTypes.ACTION_PARENT:
                     current.parent = current.parent.parent; // Go up one level
-                    current.parent.push(current);
+                    current.parent.children.push(current);
                     current = {parent: current.parent};
                     break;
 
                 case NDSARTools.actionTypes.ACTION_ROOT:
                     current.parent = codeTree; // Go back to roots (hah!)
-                    current.parent.push(current);
+                    current.parent.children.push(current);
                     current = {parent: codeTree};
                     break;
                 }
