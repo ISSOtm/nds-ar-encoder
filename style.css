@@ -1,6 +1,20 @@
 
 body {
-    font-size: 12pt;
+    font-size: 110%;
+    background-image: linear-gradient(45deg, #2d5b6e, #75806e, #70481c);
+    color: #eee;
+
+    height: auto;
+}
+
+main {
+    height: auto;
+}
+
+footer {
+    position: absolute;
+    bottom: 0;
+    margin: 0.4%;
 }
 
 
@@ -16,17 +30,33 @@ body {
     }
 }
 
-#fields > fieldset {
+#fields fieldset {
     flex-grow: 1;
+    border-radius: 20px;
 }
 
 #fields textarea {
     width: 100%;
     min-height: 10em;
+    height: auto;
     resize: vertical;
     overflow: auto;
+
+    background-color: #000a;
+    color: #ccc;
+    font-size: 1.2em;
+    padding: 1%;
+    width: 98%;
 }
 
 #encodingButtons {
     margin: 0 1%;
+    text-align: center;
+}
+
+
+#stdout {
+    background-color: #0004;
+    padding: 1%;
+    border-radius: 10px;
 }
