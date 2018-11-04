@@ -1,12 +1,18 @@
 
-v0.2.1 (2018-09-01)
+v0.3 (2018-11-04)
+Add encoder, currently puts question marks where things don't matter
+Fix a handful of typos/mistakes
+Make font size a little less ridiculous
+
+
+v0.2.1 (2018-11-01)
 Add basic styling.
 
-v0.2 (2018-09-01)
+v0.2 (2018-11-01)
 Add all missing extended operations.
 Fix inconsistency in instruction formatting.
 Fix tree navigation being broken.
 
 
-v0.1 (2018-08-31)
+v0.1 (2018-10-31)
 Partial decoding support. (Some extended operations missing)
