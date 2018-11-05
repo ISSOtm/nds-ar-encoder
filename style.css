@@ -14,7 +14,7 @@ body {
     background-size: cover;
     background-position: bottom center;
 
-    margin: 1% 1% 13% 1%;
+    margin: 1% 1% 40px 1%;
 }
 
 footer {
@@ -26,6 +26,15 @@ footer {
     margin: 0.4%;
     background-color: #000a;
     border-radius: 5px;
+
+    font-size: 90%;
+}
+
+a {
+    color: rgb(61, 61, 226);
+}
+:visited {
+    color: rgb(146, 105, 221);
 }
 
 
@@ -36,6 +45,10 @@ footer {
 }
 
 @media screen and (max-width: 700px) {
+    footer {
+        font-size: 70%;
+    }
+
     #fields {
         flex-direction: column;
     }
@@ -47,9 +60,7 @@ footer {
 }
 
 #fields textarea {
-    width: 100%;
     min-height: 10em;
-    height: auto;
     resize: vertical;
     overflow: auto;
 

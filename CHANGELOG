@@ -1,4 +1,15 @@
 
+v0.3.3 (2018-11-05)
+Fix REPT not being encoded properly
+Add special behavior with zero-length REPT (not perfect, but should work for all practical cases)
+Optimize encoder code slightly
+Fix REPT not being decoded properly
+Fix typo in source
+Fix bottom margin of page on large screens
+Remove unnecessary CSS on text fields
+Change link color
+Add copyright info
+
 v0.3.2 (2018-11-05)
 Add proper background, courtesy of RETIRE
 Fix occlusion problems with footer

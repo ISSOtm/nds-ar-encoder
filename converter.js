@@ -310,6 +310,11 @@ const NDSARTools = {
                 // Rept
                 current.type = NDSARTools.elemTypes.REPT_BLOCK;
                 current.cnt = parseInt(matches[1]);
+                if(current.cnt !== 0) {
+                    action = NDSARTools.actionTypes.ACTION_CHILD;
+                } else {
+                    // TODO: add warning
+                }
                 break;
 
             case 5:
@@ -361,7 +366,7 @@ const NDSARTools = {
         "DC?????? {8:val}"
     ],
 
-    lenPropertyRegex: /\{([0-9]):([a-z]+)\}/,
+    lenPropertyRegex: /\{([0-9]):([a-z]+)\}/i,
 
     encodeTree: function(tree) {
         let lines = [], lineID = 0;
@@ -374,17 +379,14 @@ const NDSARTools = {
                     line = NDSARTools.encodeStrings[elem.type];
                 }
 
-                do {
-                    matches = line.match(NDSARTools.lenPropertyRegex);
-                    if(matches) {
-                        len = parseInt(matches[1]);
-                        filler = elem[matches[2]].toString(16).toUpperCase().trimLeft("0").padStart(len, "0");
-                        if(filler.length > len) {
-                            throw new NDSARTools.ParseError("Number is too large", lineID);
-                        }
-                        line = line.replace(matches[0], filler);
+                while((matches = line.match(NDSARTools.lenPropertyRegex))) {
+                    len = parseInt(matches[1]);
+                    filler = elem[matches[2]].toString(16).toUpperCase().trimLeft("0").padStart(len, "0");
+                    if(filler.length > len) {
+                        throw new NDSARTools.ParseError("Number is too large", lineID);
                     }
-                } while(matches);
+                    line = line.replace(matches[0], filler);
+                }
                 // Replace filler '?'s in the string
                 /* if() {
                     line.replace('?', '0');
@@ -447,7 +449,11 @@ const NDSARTools = {
 
             case NDSARTools.elemTypes.REPT_BLOCK:
                 current.cnt  = line.slice(8);
-                action = NDSARTools.actionTypes.ACTION_CHILD;
+                if(parseInt(current.cnt) !== 0) {
+                    action = NDSARTools.actionTypes.ACTION_CHILD;
+                } else {
+                    // TODO: add warning about this
+                }
                 break;
 
             case NDSARTools.elemTypes.EXTENDED:
@@ -558,7 +564,7 @@ const NDSARTools = {
         "If [16: {loc}] & 0x{mask} == 0x{val}",
         "If [16: {loc}] & 0x{mask} != 0x{val}",
         "ofs = [32: ofs + 0x{loc}]",
-        "Rept {cnt}",
+        "Rept 0x{cnt}",
         "EXTENDED", // Stub, since there's special logic for extended elements
         "MEMORY WRITES", // TODO:
         "Copy 0x{cnt} to 0x{loc}"
@@ -593,7 +599,7 @@ const NDSARTools = {
                     let elemString = elem.type == NDSARTools.elemTypes.EXTENDED ? NDSARTools.exElemStrings[elem.exType] : NDSARTools.elemStrings[elem.type],
                         // List of all properties that needs replacement
                         propertyList = elemString.match(NDSARTools.propertyRegex) || [];
-                    // Replace all propetry names in the string by their value in the object
+                    // Replace all property names in the string by their value in the object
                     propertyList.forEach(propName => { elemString = elemString.replace(propName, elem[propName.slice(1, -1)]); });
                     lines.push(indent + elemString);
 
