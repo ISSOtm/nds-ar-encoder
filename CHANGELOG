@@ -1,4 +1,14 @@
 
+v0.3.4 (2018-11-05)
+Remove unnecessary code
+Add option checkboxes
+Fix inversion of immediate stored adding and setting
+Fix masks with 16-bit comparisons (the mask is *inverted*)
+Fix a lot of issues regarding whitespace
+Move footer so it's hopefully less obstructing
+Make ofs versus offset more consistent in generated code
+Rework encoder to hopefully produce better error messages
+
 v0.3.3 (2018-11-05)
 Fix REPT not being encoded properly
 Add special behavior with zero-length REPT (not perfect, but should work for all practical cases)

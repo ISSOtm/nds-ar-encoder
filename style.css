@@ -20,11 +20,11 @@ body {
 footer {
     position: fixed;
     bottom: 1%;
-    left: 1%;
+    right: 1%;
 
     padding: 0.4%;
     margin: 0.4%;
-    background-color: #000a;
+    background-color: #000000aa;
     border-radius: 5px;
 
     font-size: 90%;
@@ -64,7 +64,7 @@ a {
     resize: vertical;
     overflow: auto;
 
-    background-color: #000a;
+    background-color: #000000aa;
     color: #ccc;
     font-size: 1.2em;
     padding: 1%;
@@ -77,8 +77,8 @@ a {
 }
 
 
-#stdout {
-    background-color: #0004;
+.grayBG {
+    background-color: #00000044;
     padding: 1%;
     border-radius: 10px;
 }

@@ -31,23 +31,36 @@ function getElByID(id) {
     return document.getElementById(id);
 }
 
-// Remove all whitespace from a string, in multiple iterations
-// Required because somehow sometimes only one instance is removed
-function removeWhitespace(str) {
-    let oldStr;
-    do {
-        oldStr = str;
-        str = oldStr.replace(/\s+/, "");
-    } while(str !== oldStr);
-    return str;
-}
 
-// Turns a string hex digit into the corresponding integer (in range 0 through 15)
-function getHexDigit(hexDigit) {
-    return "0123456789ABCDEF".indexOf(hexDigit);
-}
+
+// The main grunt.
 
 const NDSARTools = {
+    parseNumber: function(number, nbBits) {
+        if(!/^(?:0x.+|0b[01]+|[1-9]+)$/i.test(number)) {
+            throw new NDSARTools.ParseError("Cannot parse " + number + " as a number (NB: hexadecimal pseudo-numbers are accepted)");
+        }
+
+        let num = number;
+        // Leave "0x" numbers as-is, even if they aren't proper numbers
+        if(!/^0x/i.test(number)) {
+            if(/^0b/i.test(number)) {
+                num = parseInt(number.slice(2), 2);
+            } else {
+                num = parseInt(number);
+            }
+            num = num.toString(16);
+        }
+        
+        // Remove "0x", remove trailing zeros, pad until the correct number of digits is reached
+        num = num.slice(2).trimStart("0").padStart("0", nbBits / 4);
+        if(num.length > nbBits / 4) {
+            throw new NDSARTools.ParseError(number + " is too large for " + nbBits + " bits");
+        }
+        return num;
+    },
+
+
     states: {
         CODE_BLOCK: 0,
         VALUES_BLOCK: 1
@@ -81,8 +94,8 @@ const NDSARTools = {
         END_REPT   : 1,
         END_ALL    : 2,
         LD_OFS_IMM : 3,
-        SET_STORED : 4,
-        ADD_STORED : 5,
+        ADD_STORED : 4,
+        SET_STORED : 5,
         STORE_INC32: 6,
         STORE_INC16: 7,
         STORE_INC8 : 8,
@@ -94,7 +107,12 @@ const NDSARTools = {
     },
 
     ParseError: function(message, line) {
-        this.message = "Line " + line + ": " + message;
+        this.message = message;
+        this.line = line;
+
+        this.toString = function() {
+            return "Line " + this.line + ": " + this.message;
+        };
     },
 
     actionTypes: {
@@ -109,6 +127,12 @@ const NDSARTools = {
     encodedTextarea: getElByID("arCode"),
     decodedTextarea: getElByID("pseudocode"),
     stdout:          getElByID("stdout"),
+
+    optionFields: {
+        "noQuestionMarks": "optQuestionMarks",
+        "ignoreZeroRept": "optIgnoreZeroRept",
+        "ignoreNoEndAll": "optIgnoreNoEndAll"
+    },
 
     
     clearLog: function() {
@@ -151,35 +175,33 @@ const NDSARTools = {
 
     elemRegexes: [
         // Matches 32, 16 and 8-bit writes
-        /^\[\s*(8|16|32)\s*:\s*(?:ofs|offset)\s*(?:\+\s*([0-9]+|0b[01]+|0x[0-9A-F]+))?\s*\]\s*=\s*([0-9]+|0b[01]+|0x[0-9A-F]+)$/i,
-        // Matches 32-bit comparisons
-        /^if\s+\[\s*32\s*:\s*(ofs|offset|[0-9]+|0b[01]+|0x[0-9A-F]+)\s*\]\s*(<|>|==|!=)\s*([0-9]+|0b[01]+|0x[0-9A-F]+)$/i,
-        // Matches 16-bit comparisons
-        /^if\s+\[\s*16\s*:\s*(ofs|offset|[0-9]+|0b[01]+|0x[0-9A-F]+)\s*\]\s*&\s*([0-9]+|0b[01]+|0x[0-9A-F]+)\s*(<|>|==|!=)\s*([0-9]+|0b[01]+|0x[0-9A-F]+)$/i,
+        /^\[\s*(8|16|32)\s*:\s*(.+?)\s*\]\s*=\s*(.+?)$/i,
+        // Matches 32- and 16-bit comparisons
+        /^if\s*(.+?)\s*(<|>|==|!=)\s*(.+?)$/i,
         // Matches offset setting
-        /^(?:offset|ofs)\s*=\s*\[\s*32\s*:\s*(?:ofs|offset)\s*(?:\+\s*([0-9]+|0b[01]+|0x[0-9A-F]+))?\s*\]$/i,
+        /^(?:offset|ofs)\s*=\s*\[\s*32\s*:\s*(.+?)\s*\]$/i,
         // Matches rept
-        /^rept\s+([0-9]+|0b[01]+|0x[0-9A-F]+)$/i,
+        /^rept\s+(.+?)$/i,
         // Matches memory writes
         // TODO:
         // Matches memory copy
-        /^copy\s+([0-9]+|0b[01]+|0x[0-9A-F]+)\s+to\s+([0-9]+|0b[01]+|0x[0-9A-F]+)$/i
+        /^copy\s+(.+?)\s+to\s+(.+?)$/i
     ],
 
     exElemRegexes: [
         // Matches block endings
         /^end(if|rept|all)$/i,
         // Matches immediate offset setting and adding
-        /^(?:offset|ofs)\s*(\+?)=\s*([0-9]+|0b[01]+|0x[0-9A-F]+)$/i,
+        /^(?:offset|ofs)\s*(\+?)=\s*(.+?)$/i,
         // Matches stored setting and adding
-        /^stored\s*(\+?)=\s*([0-9]+|0b[01]+|0x[0-9A-F]+)$/i,
+        /^stored\s*(\+?)=\s*\b([^[].+?)$/i,
         // Matches stored store (lol)
-        /^\[\s*(8|16|32)\+\s*:\s*(?:ofs|offset)\s*(?:\+\s*([0-9]+|0b[01]+|0x[0-9A-F]+))?\s*\]\s*=\s*stored$/i,
+        /^\[\s*(8|16|32)\s*\+\s*:\s*(.+?)\s*\]\s*=\s*stored$/i,
         // Matches stored getting
-        /^stored\s*=\s*\[\s*(8|16|32)+\s*:\s*(?:ofs|offset)\s*(?:\+\s*([0-9]+|0b[01]+|0x[0-9A-F]+))?\s*\]$/i
+        /^stored\s*=\s*\[\s*(8|16|32)+\s*:\s*(.+?)\s*\]$/i
     ],
 
-    encodeLine: function(line, current, state, lineID) {
+    encodeLine: function(line, current, state, lineID, options) {
         line = line.trim();
 
         let action = NDSARTools.actionTypes.ACTION_SIBLING,
@@ -241,30 +263,66 @@ const NDSARTools = {
             case 1:
                 // Immediate offset ops
                 current.exType = matches[1] ? NDSARTools.extendedTypes.ADD_OFS32 : NDSARTools.extendedTypes.LD_OFS_IMM;
-                current.val = parseInt(matches[2]);
+                try {
+                    current.val = NDSARTools.parseNumber(matches[2], 32);
+                } catch(error) {
+                    if(error instanceof NDSARTools.ParseError) {
+                        error.line = lineID;
+                    }
+                    throw error;
+                }
                 break;
 
             case 2:
                 // Stored setting/adding
                 current.exType = matches[1] ? NDSARTools.extendedTypes.ADD_STORED : NDSARTools.extendedTypes.SET_STORED;
-                current.val = parseInt(matches[2]);
+                try {
+                    current.val = NDSARTools.parseNumber(matches[2], 32);
+                } catch(error) {
+                    if(error instanceof NDSARTools.ParseError) {
+                        error.line = lineID;
+                    }
+                    throw error;
+                }
                 break;
             
             case 3:
                 // Stored storing
                 current.exType = NDSARTools.extendedTypes.STORE_INC32 + ["32", "16", "8"].indexOf(matches[1]);
+                matches = /^(?:offset|ofs)(?:\s*\+\s*(.+?)\s*)?$/.exec(matches[2]);
+                if(!matches) {
+                    throw new NDSARTools.ParseError("Left operand to stored stores must be an offset-relative pointer", lineID);
+                }
                 current.loc = 0;
                 if(matches[2]) {
-                    current.loc = parseInt(matches[2]);
+                    try {
+                        current.loc = parseInt(matches[2]);
+                    } catch(error) {
+                        if(error instanceof NDSARTools.ParseError) {
+                            error.line = lineID;
+                        }
+                        throw error;
+                    }
                 }
                 break;
 
             case 4:
                 // Stored getting
                 current.exType = NDSARTools.extendedTypes.LD_STORED32 + ["32", "16", "8"].indexOf(matches[1]);
+                matches = /^(?:offset|ofs)(?:\s*\+\s*(.+?)\s*)?$/.exec(matches[2]);
+                if(!matches) {
+                    throw new NDSARTools.ParseError("Left operand to stored gets must be an offset-relative pointer", lineID);
+                }
                 current.loc = 0;
-                if(matches[2]) {
-                    current.loc = parseInt(matches[2]);
+                if(matches[1]) {
+                    try {
+                        current.loc = NDSARTools.parseNumber(matches[1]);
+                    } catch(error) {
+                        if(error instanceof NDSARTools.ParseError) {
+                            error.line = lineID;
+                        }
+                        throw error;
+                    }
                 }
                 break;
             }
@@ -272,59 +330,129 @@ const NDSARTools = {
             switch(type) {
             case 0:
                 // 32, 16 and 8-bit writes
-                current.type = NDSARTools.elemTypes.WRITE_IMM32 + [32, 16, 8].indexOf(parseInt(matches[1]));
-                current.loc = 0;
-                if(matches[2]) {
-                    current.loc = parseInt(matches[2]);
+                current.type = NDSARTools.elemTypes.WRITE_IMM32 + ["32", "16", "8"].indexOf(matches[1]);
+                try {
+                    current.val = NDSARTools.parseNumber(matches[3]);
+
+                    matches = /^(?:offset|ofs)(?:\s*\+\s*(.+?))?$/.exec(matches[2]);
+                    if(!matches) {
+                        throw new NDSARTools.ParseError("Left operand to immediate write must be an offset-relative pointer!");
+                    }
+                    current.loc = 0;
+                    if(matches[1]) {
+                        current.loc = NDSARTools.parseNumber(matches[1]);
+                    }
+                } catch(error) {
+                    if(error instanceof NDSARTools.ParseError) {
+                        error.line = lineID;
+                    }
+                    throw error;
                 }
-                current.val = parseInt(matches[3]);
                 break;
             
             case 1:
-                // 32-bit comparisons
-                current.type = NDSARTools.elemTypes.IF_LT32 + ["<", ">", "==", "!="].indexOf(matches[2]);
-                current.loc = (matches[1].match(/^(offset|ofs)$/)) ? 0 : parseInt(matches[1]);
-                current.val = parseInt(matches[3]);
-                action = NDSARTools.actionTypes.ACTION_CHILD;
+                // 32- and 16-bit comparisons
+                // One of those is a pointer, let's find out which one
+                { // Needed for ESLint to not complain about declaring a variable inside a `case`
+                    current.type = ["<", ">", "==", "!="].indexOf(matches[2]);
+                    let ptrRegex = /^(?:\[\s*32\s*:\s*(.+?)\s*\]|\[\s*16\s*:\s*(.+?)\s*\](?:\s*&\s*(~)?\s*(.+))?)$/i,
+                        ptrMatches = ptrRegex.exec(matches[1]),
+                        ptrMatch;
+                    if(!ptrMatches) {
+                        // The pointer is the second element - we need to flip inequality signs if any, and also swap both matches
+                        current.type ^= (current.type >> 1) ^ 1;
+                        let tmp = matches[3];
+                        matches[3] = matches[1];
+                        matches[1] = tmp;
+                        ptrMatches = ptrRegex.exec(matches[1]);
+                        if(!ptrMatches) {
+                            throw new NDSARTools.ParseError("One of the operands to If must be a pointer", lineID);
+                        }
+                    }
+
+                    try {
+                        if(ptrMatches[1] === undefined) {
+                            // 16-bit comparison
+                            current.type += NDSARTools.elemTypes.IF_LT16;
+                            current.mask = ptrMatches[4] ? NDSARTools.parseNumber(ptrMatches[4]) : "0xFFFF"; // If the mask is unspecified, it defaults to none
+                            if(!ptrMatches[3]) {
+                                // The mask is stored inverted, so if it hasn't been inverted by the user, do it ourselves
+                                if(/^[0-9A-F]{1,4}$/.test(current.mask)) {
+                                    current.mask = (parseInt(current.mask, 16) ^ 0xFFFF).toString(16);
+                                } else {
+                                    throw new NDSARTools.ParseError("Masks are stored inverted, and can't automatically invert pseudo-values", lineID);
+                                }
+                            }
+                            ptrMatch = ptrMatches[2];
+                        } else {
+                            // 32-bit comparison
+                            current.type += NDSARTools.elemTypes.IF_LT32;
+                            ptrMatch = ptrMatches[1];
+                        }
+                        current.loc = /^(offset|ofs)$/i.test(ptrMatch) ? 0 : NDSARTools.parseNumber(ptrMatch);
+                        current.val = NDSARTools.parseNumber(matches[3]);
+                    } catch(error) {
+                        if(error instanceof NDSARTools.ParseError) {
+                            error.line = lineID;
+                        }
+                        throw error;
+                    }
+                    action = NDSARTools.actionTypes.ACTION_CHILD;
+                }
                 break;
             
             case 2:
-                // 16-bit comparisons
-                current.type = NDSARTools.elemTypes.IF_LT16 + ["<", ">", "==", "!="].indexOf(matches[3]);
-                current.loc = (matches[1].match(/^(offset|ofs)$/)) ? 0 : parseInt(matches[1]);
-                current.mask = parseInt(matches[2]);
-                current.val = parseInt(matches[4]);
-                action = NDSARTools.actionTypes.ACTION_CHILD;
-                break;
-            
-            case 3:
                 // Offset setting
                 current.type = NDSARTools.elemTypes.LD_OFS_IND;
+                matches = /^(?:offset|ofs)(?:\s*\+\s*(.+?))$/.exec(matches[1]);
                 current.loc = 0;
                 if(matches[1]) {
-                    current.loc = parseInt(matches[1]);
+                    try {
+                        current.loc = NDSARTools.parseNumber(matches[1]);
+                    } catch(error) {
+                        if(error instanceof NDSARTools.ParseError) {
+                            error.line = lineID;
+                        }
+                        throw error;
+                    }
+                }
+                break;
+
+            case 3:
+                // Rept
+                current.type = NDSARTools.elemTypes.REPT_BLOCK;
+                try {
+                    current.cnt = NDSARTools.parseNumber(matches[1]);
+                } catch(error) {
+                    if(error instanceof NDSARTools.ParseError) {
+                        error.line = lineID;
+                    }
+                    throw error;
+                }
+                if(parseInt(current.cnt) === 0) {
+                    if(!options.ignoreZeroRept) {
+                        NDSARTools.logWarning("REPT with length zero isn't properly defined");
+                    }
+                } else {
+                    action = NDSARTools.actionTypes.ACTION_CHILD;
                 }
                 break;
 
             case 4:
-                // Rept
-                current.type = NDSARTools.elemTypes.REPT_BLOCK;
-                current.cnt = parseInt(matches[1]);
-                if(current.cnt !== 0) {
-                    action = NDSARTools.actionTypes.ACTION_CHILD;
-                } else {
-                    // TODO: add warning
-                }
-                break;
-
-            case 5:
                 // TODO: memory writes
 
-            // case 6:
+            // case 5:
                 // Memory copy
                 current.type = NDSARTools.elemTypes.MEMCPY;
-                current.cnt = parseInt(matches[1]);
-                current.loc = parseInt(matches[2]);
+                try {
+                    current.cnt = NDSARTools.parseNumber(matches[1]);
+                    current.loc = NDSARTools.parseNumber(matches[2]);
+                } catch(error) {
+                    if(error instanceof NDSARTools.ParseError) {
+                        error.line = lineID;
+                    }
+                    throw error;
+                }
                 break;
             }
         }
@@ -368,7 +496,7 @@ const NDSARTools = {
 
     lenPropertyRegex: /\{([0-9]):([a-z]+)\}/i,
 
-    encodeTree: function(tree) {
+    encodeTree: function(tree, options) {
         let lines = [], lineID = 0;
         (function processTree(tree) {
             tree.children.forEach(elem => {
@@ -378,19 +506,18 @@ const NDSARTools = {
                 } else {
                     line = NDSARTools.encodeStrings[elem.type];
                 }
+                if(options.noQuestionMarks) {
+                    line = line.replace(/\?/g, "0");
+                }
 
                 while((matches = line.match(NDSARTools.lenPropertyRegex))) {
                     len = parseInt(matches[1]);
-                    filler = elem[matches[2]].toString(16).toUpperCase().trimLeft("0").padStart(len, "0");
+                    filler = elem[matches[2]].toString(16).toUpperCase().trimStart("0").padStart(len, "0");
                     if(filler.length > len) {
                         throw new NDSARTools.ParseError("Number is too large", lineID);
                     }
                     line = line.replace(matches[0], filler);
                 }
-                // Replace filler '?'s in the string
-                /* if() {
-                    line.replace('?', '0');
-                } */
                 lines.push(line);
                 lineID++;
 
@@ -404,9 +531,13 @@ const NDSARTools = {
     },
 
 
-    decodeLine: function(line, current, state, lineID) {
+    decodeLine: function(line, current, state, lineID, options) {
+        if(!/^\s*[^\s]{8}\s+[^\s]{8}\s*$/.test(line)) {
+            throw new NDSARTools.ParseError("Lines must be in '01234567 89ABCDEF' format", lineID);
+        }
+
         // Trim the line and remove all whitespace
-        line = removeWhitespace(line);
+        line = line.replace(/\s+/g, "");
 
         let action = NDSARTools.actionTypes.ACTION_SIBLING;
 
@@ -414,9 +545,9 @@ const NDSARTools = {
         switch(state) {
         case NDSARTools.states.CODE_BLOCK:
             // Insert an element in the tree depending on type
-            current.type = getHexDigit(line[0]);
+            current.type = parseInt(line[0], 16);
 
-            switch(getHexDigit(line[0])) {
+            switch(parseInt(line[0], 16)) {
             case NDSARTools.elemTypes.IF_LT32:
             case NDSARTools.elemTypes.IF_GT32:
             case NDSARTools.elemTypes.IF_EQ32:
@@ -451,14 +582,14 @@ const NDSARTools = {
                 current.cnt  = line.slice(8);
                 if(parseInt(current.cnt) !== 0) {
                     action = NDSARTools.actionTypes.ACTION_CHILD;
-                } else {
-                    // TODO: add warning about this
+                } else if(!options.ignoreZeroRept) {
+                    NDSARTools.logWarning("REPT with length zero isn't properly defined");
                 }
                 break;
 
             case NDSARTools.elemTypes.EXTENDED:
-                current.exType = getHexDigit(line[1]);
-                switch(getHexDigit(line[1])) {
+                current.exType = parseInt(line[1], 16);
+                switch(parseInt(line[1], 16)) {
                 case NDSARTools.extendedTypes.END_IF:
                     if(current.parent.parent === null || !NDSARTools.elemTypes.isIf(current.parent.type)) {
                         throw new NDSARTools.ParseError("Encountered ENDIF without being in IF", lineID);
@@ -552,18 +683,18 @@ const NDSARTools = {
     },
 
     elemStrings: [
-        "[32: ofs + 0x{loc}] = 0x{val}",
-        "[16: ofs + 0x{loc}] = 0x{val}",
-        "[ 8: ofs + 0x{loc}] = 0x{val}",
+        "[32: offset + 0x{loc}] = 0x{val}",
+        "[16: offset + 0x{loc}] = 0x{val}",
+        "[ 8: offset + 0x{loc}] = 0x{val}",
         "If [32: {loc}] < 0x{val}",
         "If [32: {loc}] > 0x{val}",
         "If [32: {loc}] == 0x{val}",
         "If [32: {loc}] != 0x{val}",
-        "If [16: {loc}] & 0x{mask} < 0x{val}",
-        "If [16: {loc}] & 0x{mask} > 0x{val}",
-        "If [16: {loc}] & 0x{mask} == 0x{val}",
-        "If [16: {loc}] & 0x{mask} != 0x{val}",
-        "ofs = [32: ofs + 0x{loc}]",
+        "If [16: {loc}] & ~0x{mask} < 0x{val}",
+        "If [16: {loc}] & ~0x{mask} > 0x{val}",
+        "If [16: {loc}] & ~0x{mask} == 0x{val}",
+        "If [16: {loc}] & ~0x{mask} != 0x{val}",
+        "offset = [32: offset + 0x{loc}]",
         "Rept 0x{cnt}",
         "EXTENDED", // Stub, since there's special logic for extended elements
         "MEMORY WRITES", // TODO:
@@ -574,22 +705,22 @@ const NDSARTools = {
         "EndIf",
         "EndRept",
         "EndAll",
-        "ofs = 0x{val}",
+        "offset = 0x{val}",
         "stored += 0x{val}",
         "stored = 0x{val}",
         "[32+: ofs + 0x{loc}] = stored",
         "[16+: ofs + 0x{loc}] = stored",
         "[ 8+: ofs + 0x{loc}] = stored",
-        "stored = [32: ofs + 0x{loc}]",
-        "stored = [16: ofs + 0x{loc}]",
-        "stored = [ 8: ofs + 0x{loc}]",
-        "ofs += 0x{val}"
+        "stored = [32: offset + 0x{loc}]",
+        "stored = [16: offset + 0x{loc}]",
+        "stored = [ 8: offset + 0x{loc}]",
+        "offset += 0x{val}"
         // No more codes
     ],
 
     propertyRegex: /\{[a-z]+\}/gi,
 
-    decodeTree: function(tree) {
+    decodeTree: function(tree, options) {
         let lineID = 0; // Just in case there's any need to throw a ParseError...
         return (
             function decodeElems(elem, lines, indent) {
@@ -618,6 +749,11 @@ const NDSARTools = {
             NDSARTools.clearLog();
             NDSARTools.logMessage("Beginning...");
 
+            let options = {};
+            for(const optionName in NDSARTools.optionFields) {
+                options[optionName] = getElByID(NDSARTools.optionFields[optionName]).checked;
+            }
+
             const encodedCode = getterFunc().split("\n");
             let codeTree = {parent: null, children: []},
                 state = NDSARTools.states.CODE_BLOCK,
@@ -626,7 +762,7 @@ const NDSARTools = {
                 action;
 
             encodedCode.forEach(line => {
-                let next = lineProcessor(line, current, state, lineID);
+                let next = lineProcessor(line, current, state, lineID, options);
                 action = next.action;
                 state  = next.state;
 
@@ -657,13 +793,16 @@ const NDSARTools = {
 
                 lineID++;
             });
+            if(codeTree.children.slice(-1)[0].exType !== NDSARTools.extendedTypes.END_ALL && !options.ignoreNoEndAll) {
+                NDSARTools.logWarning("Code does not end with an EndAll operation");
+            }
             NDSARTools.logMessage("Finished building tree.");
             
-            setterFunc(treeProcessor(codeTree).join("\n"));
+            setterFunc(treeProcessor(codeTree, options).join("\n"));
             NDSARTools.logMessage("Operation successful!");
         } catch(error) {
             if(error instanceof NDSARTools.ParseError) {
-                NDSARTools.logError("Parsing failed: " + error.message);
+                NDSARTools.logError("Parsing failed: " + error.toString());
             } else {
                 NDSARTools.logWarning("AN INTERNAL ERROR HAS OCCURRED.");
                 NDSARTools.logWarning("This isn't supposed to happen.");

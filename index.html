@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html>
+<html lang="en-US">
     <head>
         <meta charset="utf-8" />
         <meta http-equiv="X-UA-Compatible" content="IE=Edge,chrome=1" />
-        <meta name="viewport" content="width=device-width, initial_scale=1" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Nintendo DS Action Replay encoder/decoder</title>
 
         <!--
@@ -57,16 +57,29 @@ SOFTWARE.
                     <textarea id="pseudocode"></textarea>
                 </fieldset>
             </section>
+
+            <section>
+                <h2>Options</h2>
+
+                <div class="grayBG">
+                    <input type="checkbox" id="optQuestionMarks" /><label for="optQuestionMarks">Fill unused areas with zeros</label>
+                    <br />
+                    <input type="checkbox" id="optIgnoreZeroRept" /><label for="optIgnoreZeroRept">Ignore warnings about zero-length REPT</label>
+                    <br />
+                    <input type="checkbox" id="optIgnoreNoEndAll" /><label for="optIgnoreNoEndAll">Ignore warnings about lack of EndAll</label>
+                </div>
+            </section>
+
             <section>
                 <h2>Output log</h2>
-                <pre id="stdout"></pre>
+                <pre id="stdout" class="grayBG"></pre>
             </section>
         </main>
 
         <footer>
-            Version 0.3.3 by <a href="https://eldred.fr">ISSOtm</a>. <small>Background image from Pokémon Diamond/Pearl/Platinum &copy; Game Freak</small>
+            Version 0.3.4 by <a href="https://eldred.fr">ISSOtm</a>. <small>Background image from Pokémon Diamond/Pearl/Platinum &copy; Game Freak</small>
         </footer>
 
-        <script type="text/javascript" src="converter.js"></script>
+        <script src="converter.js"></script>
     </body>
 </html>
