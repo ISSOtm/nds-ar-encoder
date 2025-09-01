@@ -52,8 +52,8 @@ const NDSARTools = {
             num = num.toString(16);
         }
         
-        // Remove "0x", remove trailing zeros, pad until the correct number of digits is reached
-        num = num.slice(2).trimStart("0").padStart("0", nbBits / 4);
+        // Remove "0x", remove leading zeros, pad until the correct number of digits is reached
+        num = num.slice(2).replace(/^0*/, "").padStart("0", nbBits / 4);
         if(num.length > nbBits / 4) {
             throw new NDSARTools.ParseError(number + " is too large for " + nbBits + " bits");
         }
@@ -512,7 +512,7 @@ const NDSARTools = {
 
                 while((matches = line.match(NDSARTools.lenPropertyRegex))) {
                     len = parseInt(matches[1]);
-                    filler = elem[matches[2]].toString(16).toUpperCase().trimStart("0").padStart(len, "0");
+                    filler = elem[matches[2]].toString(16).replace(/^0*/, "").toUpperCase().padStart(len, "0");
                     if(filler.length > len) {
                         throw new NDSARTools.ParseError("Number is too large", lineID);
                     }
